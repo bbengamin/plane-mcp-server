@@ -69,9 +69,7 @@ def register_milestone_tools(mcp: FastMCP) -> None:
             external_id=external_id,
         )
 
-        return client.milestones.create(
-            workspace_slug=workspace_slug, project_id=project_id, data=data
-        )
+        return client.milestones.create(workspace_slug=workspace_slug, project_id=project_id, data=data)
 
     @mcp.tool()
     def retrieve_milestone(project_id: str, milestone_id: str) -> Milestone:
@@ -139,15 +137,13 @@ def register_milestone_tools(mcp: FastMCP) -> None:
             milestone_id: UUID of the milestone
         """
         client, workspace_slug = get_plane_client_context()
-        client.milestones.delete(
-            workspace_slug=workspace_slug, project_id=project_id, milestone_id=milestone_id
-        )
+        client.milestones.delete(workspace_slug=workspace_slug, project_id=project_id, milestone_id=milestone_id)
 
     @mcp.tool()
     def add_work_items_to_milestone(
         project_id: str,
         milestone_id: str,
-        issue_ids: list[str],
+        work_item_ids: list[str],
     ) -> None:
         """
         Add work items to a milestone.
@@ -155,21 +151,21 @@ def register_milestone_tools(mcp: FastMCP) -> None:
         Args:
             project_id: UUID of the project
             milestone_id: UUID of the milestone
-            issue_ids: List of work item IDs to add to the milestone
+            work_item_ids: List of work item UUIDs to add to the milestone
         """
         client, workspace_slug = get_plane_client_context()
         client.milestones.add_work_items(
             workspace_slug=workspace_slug,
             project_id=project_id,
             milestone_id=milestone_id,
-            issue_ids=issue_ids,
+            issue_ids=work_item_ids,
         )
 
     @mcp.tool()
     def remove_work_items_from_milestone(
         project_id: str,
         milestone_id: str,
-        issue_ids: list[str],
+        work_item_ids: list[str],
     ) -> None:
         """
         Remove work items from a milestone.
@@ -177,14 +173,14 @@ def register_milestone_tools(mcp: FastMCP) -> None:
         Args:
             project_id: UUID of the project
             milestone_id: UUID of the milestone
-            issue_ids: List of work item IDs to remove from the milestone
+            work_item_ids: List of work item UUIDs to remove from the milestone
         """
         client, workspace_slug = get_plane_client_context()
         client.milestones.remove_work_items(
             workspace_slug=workspace_slug,
             project_id=project_id,
             milestone_id=milestone_id,
-            issue_ids=issue_ids,
+            issue_ids=work_item_ids,
         )
 
     @mcp.tool()
