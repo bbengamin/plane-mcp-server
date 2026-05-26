@@ -280,6 +280,10 @@ EXPECTED_TOOLS = [
     "retrieve_project_page",
     "create_workspace_page",
     "create_project_page",
+    "update_workspace_page",
+    "update_project_page",
+    "delete_workspace_page",
+    "delete_project_page",
     # Work item activity tools
     "list_work_item_activities",
     "retrieve_work_item_activity",
