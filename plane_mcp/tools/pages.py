@@ -1,6 +1,6 @@
 """Page-related tools for Plane MCP Server."""
 
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
@@ -8,6 +8,17 @@ from plane.errors.errors import HttpError
 from plane.models.pages import CreatePage, Page, UpdatePage
 
 from plane_mcp.client import get_plane_client_context
+
+
+class PageDeleteResult(TypedDict):
+    """Structured success payload for page delete operations."""
+
+    success: bool
+    action: Literal["deleted"]
+    scope: Literal["workspace", "project"]
+    workspace_slug: str
+    page_id: str
+    project_id: str | None
 
 
 def register_page_tools(mcp: FastMCP) -> None:
@@ -46,11 +57,24 @@ def register_page_tools(mcp: FastMCP) -> None:
         *,
         client: Any,
         endpoint: str,
-    ) -> None:
+        workspace_slug: str,
+        page_id: str,
+        scope: Literal["workspace", "project"],
+        project_id: str | None = None,
+    ) -> PageDeleteResult:
         try:
             client.pages._delete(endpoint)
         except HttpError as error:
             raise ToolError(build_page_mutation_error_message(error)) from error
+
+        return {
+            "success": True,
+            "action": "deleted",
+            "scope": scope,
+            "workspace_slug": workspace_slug,
+            "page_id": page_id,
+            "project_id": project_id,
+        }
 
     @mcp.tool()
     def retrieve_workspace_page(
@@ -315,30 +339,45 @@ def register_page_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool()
-    def delete_workspace_page(page_id: str) -> None:
+    def delete_workspace_page(page_id: str) -> PageDeleteResult:
         """
         Delete a workspace page by ID.
 
         Args:
             page_id: UUID of the page
+
+        Returns:
+            Structured delete confirmation payload
         """
         client, workspace_slug = get_plane_client_context()
-        delete_page_via_sdk_resource(
+
+        return delete_page_via_sdk_resource(
             client=client,
             endpoint=f"{workspace_slug}/pages/{page_id}",
+            workspace_slug=workspace_slug,
+            page_id=page_id,
+            scope="workspace",
         )
 
     @mcp.tool()
-    def delete_project_page(project_id: str, page_id: str) -> None:
+    def delete_project_page(project_id: str, page_id: str) -> PageDeleteResult:
         """
         Delete a project page by ID.
 
         Args:
             project_id: UUID of the project
             page_id: UUID of the page
+
+        Returns:
+            Structured delete confirmation payload
         """
         client, workspace_slug = get_plane_client_context()
-        delete_page_via_sdk_resource(
+
+        return delete_page_via_sdk_resource(
             client=client,
             endpoint=f"{workspace_slug}/projects/{project_id}/pages/{page_id}",
+            workspace_slug=workspace_slug,
+            project_id=project_id,
+            page_id=page_id,
+            scope="project",
         )

@@ -110,7 +110,14 @@ def test_delete_workspace_page_uses_pages_delete(monkeypatch):
     result = delete_workspace_page(page_id="page-123")
 
     assert fake_pages.delete_calls == ["workspace-slug/pages/page-123"]
-    assert result is None
+    assert result == {
+        "success": True,
+        "action": "deleted",
+        "scope": "workspace",
+        "workspace_slug": "workspace-slug",
+        "page_id": "page-123",
+        "project_id": None,
+    }
 
 
 def test_delete_project_page_uses_pages_delete(monkeypatch):
@@ -126,4 +133,11 @@ def test_delete_project_page_uses_pages_delete(monkeypatch):
     result = delete_project_page(project_id="project-456", page_id="page-123")
 
     assert fake_pages.delete_calls == ["workspace-slug/projects/project-456/pages/page-123"]
-    assert result is None
+    assert result == {
+        "success": True,
+        "action": "deleted",
+        "scope": "project",
+        "workspace_slug": "workspace-slug",
+        "page_id": "page-123",
+        "project_id": "project-456",
+    }
