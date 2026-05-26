@@ -42,6 +42,16 @@ def register_page_tools(mcp: FastMCP) -> None:
             raise ToolError(build_page_mutation_error_message(error)) from error
         return Page.model_validate(response)
 
+    def delete_page_via_sdk_resource(
+        *,
+        client: Any,
+        endpoint: str,
+    ) -> None:
+        try:
+            client.pages._delete(endpoint)
+        except HttpError as error:
+            raise ToolError(build_page_mutation_error_message(error)) from error
+
     @mcp.tool()
     def retrieve_workspace_page(
         page_id: str,
@@ -302,4 +312,33 @@ def register_page_tools(mcp: FastMCP) -> None:
             client=client,
             endpoint=f"{workspace_slug}/projects/{project_id}/pages/{page_id}",
             data=data,
+        )
+
+    @mcp.tool()
+    def delete_workspace_page(page_id: str) -> None:
+        """
+        Delete a workspace page by ID.
+
+        Args:
+            page_id: UUID of the page
+        """
+        client, workspace_slug = get_plane_client_context()
+        delete_page_via_sdk_resource(
+            client=client,
+            endpoint=f"{workspace_slug}/pages/{page_id}",
+        )
+
+    @mcp.tool()
+    def delete_project_page(project_id: str, page_id: str) -> None:
+        """
+        Delete a project page by ID.
+
+        Args:
+            project_id: UUID of the project
+            page_id: UUID of the page
+        """
+        client, workspace_slug = get_plane_client_context()
+        delete_page_via_sdk_resource(
+            client=client,
+            endpoint=f"{workspace_slug}/projects/{project_id}/pages/{page_id}",
         )

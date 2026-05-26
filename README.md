@@ -212,6 +212,19 @@ The server provides comprehensive tools for interacting with Plane. All tools us
 | `update_intake_work_item` | Update an intake work item with partial data |
 | `delete_intake_work_item` | Delete an intake work item by work item ID |
 
+### Pages
+
+| Tool Name | Description |
+|-----------|-------------|
+| `retrieve_workspace_page` | Retrieve a workspace page by ID |
+| `retrieve_project_page` | Retrieve a project page by ID |
+| `create_workspace_page` | Create a workspace page |
+| `create_project_page` | Create a project page |
+| `update_workspace_page` | Update a workspace page by ID |
+| `update_project_page` | Update a project page by ID |
+| `delete_workspace_page` | Delete a workspace page by ID |
+| `delete_project_page` | Delete a project page by ID |
+
 ### Work Item Properties
 
 | Tool Name | Description |
