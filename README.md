@@ -222,8 +222,10 @@ The server provides comprehensive tools for interacting with Plane. All tools us
 | `create_project_page` | Create a project page |
 | `update_workspace_page` | Update a workspace page by ID |
 | `update_project_page` | Update a project page by ID |
-| `delete_workspace_page` | Delete a workspace page by ID |
-| `delete_project_page` | Delete a project page by ID |
+| `delete_workspace_page` | Hard-delete a workspace page by ID |
+| `delete_project_page` | Hard-delete a project page by ID |
+
+Page removal uses Plane's `DELETE` page endpoint when the deployment/auth mode supports it. Plane returns `204 No Content`, so the MCP tool returns a structured success payload instead of a page object. No dedicated page archive/unarchive removal tool is exposed here, so this action is not reversible through Plane MCP.
 
 ### Work Item Properties
 
@@ -342,6 +344,8 @@ The server provides comprehensive tools for interacting with Plane. All tools us
 | `create_project_page` | Create a project page |
 | `update_workspace_page` | Update a workspace page by ID |
 | `update_project_page` | Update a project page by ID |
+| `delete_workspace_page` | Hard-delete a workspace page by ID |
+| `delete_project_page` | Hard-delete a project page by ID |
 
 ### Workspaces
 

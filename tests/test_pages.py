@@ -116,6 +116,48 @@ class FakePagesResource:
 
         raise AssertionError(f"Unexpected patch endpoint: {endpoint}")
 
+    def _delete(self, endpoint: str):
+        parts = endpoint.strip("/").split("/")
+
+        if len(parts) == 3 and parts[1] == "pages":
+            page_id = parts[2]
+            if page_id == "forbidden-workspace-page":
+                raise HttpError(
+                    "HTTP 403: Forbidden",
+                    403,
+                    {"detail": "Workspace page delete is forbidden"},
+                )
+            if page_id not in self.workspace_pages:
+                raise HttpError(
+                    "HTTP 404: Not Found",
+                    404,
+                    {"detail": f"Workspace page {page_id} not found"},
+                )
+            del self.workspace_pages[page_id]
+            return None
+
+        if len(parts) == 5 and parts[1] == "projects" and parts[3] == "pages":
+            project_id = parts[2]
+            page_id = parts[4]
+            if not any(saved_project_id == project_id for saved_project_id, _ in self.project_pages):
+                raise HttpError(
+                    "HTTP 404: Not Found",
+                    404,
+                    {"detail": f"Project {project_id} not found"},
+                )
+
+            key = (project_id, page_id)
+            if key not in self.project_pages:
+                raise HttpError(
+                    "HTTP 404: Not Found",
+                    404,
+                    {"detail": f"Project page {page_id} not found"},
+                )
+            del self.project_pages[key]
+            return None
+
+        raise AssertionError(f"Unexpected delete endpoint: {endpoint}")
+
 
 @contextmanager
 def page_test_server():
@@ -140,6 +182,8 @@ class TestPageTools(unittest.TestCase):
 
             self.assertIn("update_workspace_page", tool_names)
             self.assertIn("update_project_page", tool_names)
+            self.assertIn("delete_workspace_page", tool_names)
+            self.assertIn("delete_project_page", tool_names)
 
         asyncio.run(run())
 
@@ -272,5 +316,117 @@ class TestPageTools(unittest.TestCase):
                     with self.subTest(tool_name=tool_name, arguments=arguments):
                         with self.assertRaisesRegex(ToolError, expected_message):
                             await mcp._call_tool_mcp(tool_name, arguments)
+
+        asyncio.run(run())
+
+    def test_delete_workspace_page_returns_structured_success(self):
+        async def run():
+            with page_test_server() as (mcp, fake_pages):
+                result = await mcp._call_tool_mcp(
+                    "delete_workspace_page",
+                    {"page_id": "workspace-page-1"},
+                )
+                deleted = extract_result(result)
+
+                self.assertEqual(
+                    deleted,
+                    {
+                        "success": True,
+                        "action": "deleted",
+                        "scope": "workspace",
+                        "workspace_slug": "test-workspace",
+                        "page_id": "workspace-page-1",
+                        "project_id": None,
+                    },
+                )
+                self.assertNotIn("workspace-page-1", fake_pages.workspace_pages)
+
+        asyncio.run(run())
+
+    def test_delete_project_page_returns_structured_success(self):
+        async def run():
+            with page_test_server() as (mcp, fake_pages):
+                result = await mcp._call_tool_mcp(
+                    "delete_project_page",
+                    {"project_id": "project-1", "page_id": "project-page-1"},
+                )
+                deleted = extract_result(result)
+
+                self.assertEqual(
+                    deleted,
+                    {
+                        "success": True,
+                        "action": "deleted",
+                        "scope": "project",
+                        "workspace_slug": "test-workspace",
+                        "page_id": "project-page-1",
+                        "project_id": "project-1",
+                    },
+                )
+                self.assertNotIn(("project-1", "project-page-1"), fake_pages.project_pages)
+
+        asyncio.run(run())
+
+    def test_delete_page_tools_require_ids(self):
+        cases = [
+            ("delete_workspace_page", {}, "page_id"),
+            ("delete_project_page", {"page_id": "project-page-1"}, "project_id"),
+            ("delete_project_page", {"project_id": "project-1"}, "page_id"),
+        ]
+
+        async def run():
+            with page_test_server() as (mcp, _fake_pages):
+                for tool_name, arguments, expected_message in cases:
+                    with self.subTest(tool_name=tool_name, arguments=arguments):
+                        with self.assertRaisesRegex(ValidationError, expected_message):
+                            await mcp._call_tool_mcp(tool_name, arguments)
+
+        asyncio.run(run())
+
+    def test_delete_page_tools_surface_invalid_ids(self):
+        cases = [
+            (
+                "delete_workspace_page",
+                {"page_id": "missing-workspace-page"},
+                "Workspace page missing-workspace-page not found",
+            ),
+            (
+                "delete_project_page",
+                {
+                    "project_id": "missing-project",
+                    "page_id": "project-page-1",
+                },
+                "Project missing-project not found",
+            ),
+            (
+                "delete_project_page",
+                {
+                    "project_id": "project-1",
+                    "page_id": "missing-project-page",
+                },
+                "Project page missing-project-page not found",
+            ),
+        ]
+
+        async def run():
+            with page_test_server() as (mcp, _fake_pages):
+                for tool_name, arguments, expected_message in cases:
+                    with self.subTest(tool_name=tool_name, arguments=arguments):
+                        with self.assertRaisesRegex(ToolError, expected_message):
+                            await mcp._call_tool_mcp(tool_name, arguments)
+
+        asyncio.run(run())
+
+    def test_delete_workspace_page_preserves_permission_guidance(self):
+        async def run():
+            with page_test_server() as (mcp, _fake_pages):
+                with self.assertRaisesRegex(
+                    ToolError,
+                    "Plane returned 403 for page mutation. This auth mode likely cannot update/delete pages; try PAT/user auth.",
+                ):
+                    await mcp._call_tool_mcp(
+                        "delete_workspace_page",
+                        {"page_id": "forbidden-workspace-page"},
+                    )
 
         asyncio.run(run())
