@@ -3,6 +3,8 @@
 from typing import Any
 
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
+from plane.errors.errors import HttpError
 from plane.models.pages import CreatePage, Page, UpdatePage
 
 from plane_mcp.client import get_plane_client_context
@@ -11,13 +13,33 @@ from plane_mcp.client import get_plane_client_context
 def register_page_tools(mcp: FastMCP) -> None:
     """Register all page-related tools with the MCP server."""
 
+    def build_page_mutation_error_message(error: HttpError) -> str:
+        """Preserve useful Plane errors and clarify auth-mode limits for page mutations."""
+        if error.status_code == 403:
+            return "Plane returned 403 for page mutation. This auth mode likely cannot update/delete pages; try PAT/user auth."
+
+        detail = None
+        if isinstance(error.response, dict):
+            detail = error.response.get("detail") or error.response.get("error") or error.response.get("message")
+
+        if isinstance(detail, list):
+            detail = ", ".join(str(item) for item in detail)
+
+        if detail and detail not in str(error):
+            return f"{error}: {detail}"
+
+        return str(error)
+
     def update_page_via_sdk_resource(
         *,
         client: Any,
         endpoint: str,
         data: UpdatePage,
     ) -> Page:
-        response = client.pages._patch(endpoint, data.model_dump(exclude_none=True))
+        try:
+            response = client.pages._patch(endpoint, data.model_dump(exclude_none=True))
+        except HttpError as error:
+            raise ToolError(build_page_mutation_error_message(error)) from error
         return Page.model_validate(response)
 
     def delete_page_via_sdk_resource(
@@ -25,7 +47,10 @@ def register_page_tools(mcp: FastMCP) -> None:
         client: Any,
         endpoint: str,
     ) -> None:
-        client.pages._delete(endpoint)
+        try:
+            client.pages._delete(endpoint)
+        except HttpError as error:
+            raise ToolError(build_page_mutation_error_message(error)) from error
 
     @mcp.tool()
     def retrieve_workspace_page(

@@ -340,6 +340,8 @@ The server provides comprehensive tools for interacting with Plane. All tools us
 | `retrieve_project_page` | Retrieve a project page by ID |
 | `create_workspace_page` | Create a workspace page |
 | `create_project_page` | Create a project page |
+| `update_workspace_page` | Update a workspace page by ID |
+| `update_project_page` | Update a project page by ID |
 
 ### Workspaces
 
