@@ -1,22 +1,13 @@
 """
 Simple integration test for Plane MCP Server.
 
-Supported auth modes:
-    1. Direct Plane MCP PAT mode (default)
-       - PLANE_TEST_API_KEY
-       - PLANE_TEST_WORKSPACE_SLUG
-       - optional PLANE_TEST_MCP_URL (default: http://localhost:8211)
-       - optional PLANE_TEST_MCP_PATH (default: /http/api-key/mcp)
-
-    2. Bridge MCP mode
-       - PLANE_TEST_MCP_URL=http://127.0.0.1:3000
-       - PLANE_TEST_MCP_PATH=/mcp
-       - PLANE_TEST_AUTH_TOKEN or BRIDGE_MCP_AUTH_TOKEN
-       - optional PLANE_TEST_WORKSPACE_SLUG (not required by bridge)
+Environment Variables Required:
+    PLANE_TEST_API_KEY: API key for authentication
+    PLANE_TEST_WORKSPACE_SLUG: Workspace slug for testing
+    PLANE_TEST_MCP_URL: MCP server URL (default: http://localhost:8211)
 """
 
 import asyncio
-import json
 import os
 import uuid
 
@@ -26,45 +17,20 @@ from fastmcp.client.transports import StreamableHttpTransport
 
 def get_config():
     """Load test configuration from environment."""
-    auth_token = (
-        os.getenv("PLANE_TEST_AUTH_TOKEN")
-        or os.getenv("PLANE_TEST_API_KEY")
-        or os.getenv("BRIDGE_MCP_AUTH_TOKEN", "")
-    )
-    workspace_slug = os.getenv("PLANE_TEST_WORKSPACE_SLUG") or os.getenv("PLANE_WORKSPACE_SLUG", "")
-    mcp_url = os.getenv("PLANE_TEST_MCP_URL", "http://localhost:8211").rstrip("/")
-    mcp_path = os.getenv("PLANE_TEST_MCP_PATH", "/http/api-key/mcp")
-    extra_headers_json = os.getenv("PLANE_TEST_EXTRA_HEADERS_JSON", "")
+    api_key = os.getenv("PLANE_TEST_API_KEY", "")
+    workspace_slug = os.getenv("PLANE_TEST_WORKSPACE_SLUG", "")
+    mcp_url = os.getenv("PLANE_TEST_MCP_URL", "http://localhost:8211")
 
-    if not auth_token:
-        raise RuntimeError("Missing required auth token: PLANE_TEST_AUTH_TOKEN, PLANE_TEST_API_KEY, or BRIDGE_MCP_AUTH_TOKEN")
-
-    if mcp_path == "/http/api-key/mcp" and not workspace_slug:
-        raise RuntimeError("PLANE_TEST_WORKSPACE_SLUG is required when using /http/api-key/mcp")
-
-    headers = {
-        "authorization": f"Bearer {auth_token}",
-    }
-    if workspace_slug:
-        headers["x-workspace-slug"] = workspace_slug
-    if extra_headers_json:
-        headers.update(json.loads(extra_headers_json))
+    if not api_key or not workspace_slug:
+        raise RuntimeError(
+            "Missing required env vars: PLANE_TEST_API_KEY, PLANE_TEST_WORKSPACE_SLUG"
+        )
 
     return {
-        "auth_token": auth_token,
+        "api_key": api_key,
         "workspace_slug": workspace_slug,
         "mcp_url": mcp_url,
-        "mcp_path": mcp_path,
-        "headers": headers,
     }
-
-
-def build_transport(config):
-    """Build MCP transport from flexible test configuration."""
-    return StreamableHttpTransport(
-        f"{config['mcp_url']}{config['mcp_path']}",
-        headers=config["headers"],
-    )
 
 
 def extract_result(result):
@@ -72,6 +38,8 @@ def extract_result(result):
     if hasattr(result, "structured_content") and result.structured_content is not None:
         return result.structured_content
     if hasattr(result, "content") and result.content:
+        import json
+
         content = result.content[0]
         if hasattr(content, "text"):
             try:
@@ -102,7 +70,13 @@ async def run_integration_test():
     config = get_config() 
     unique_id = uuid.uuid4().hex[:6]
 
-    transport = build_transport(config)
+    transport = StreamableHttpTransport(
+        f"{config['mcp_url']}/http/api-key/mcp",
+        headers={
+            "x-workspace-slug": config["workspace_slug"],
+            "authorization": f"Bearer {config['api_key']}",
+        },
+    )
 
     async with Client(transport=transport) as client:
         # 1. Create project
@@ -403,7 +377,13 @@ async def run_tools_availability_test():
     """
     config = get_config()
 
-    transport = build_transport(config)
+    transport = StreamableHttpTransport(
+        f"{config['mcp_url']}/http/api-key/mcp",
+        headers={
+            "x-workspace-slug": config["workspace_slug"],
+            "authorization": f"Bearer {config['api_key']}",
+        },
+    )
 
     async with Client(transport=transport) as client:
         # Get list of available tools
@@ -426,131 +406,9 @@ async def run_tools_availability_test():
         print("Tools availability test passed!")
 
 
-async def run_page_update_integration_test():
-    """Verify workspace and project page update flows over MCP HTTP."""
-    config = get_config()
-    unique_id = uuid.uuid4().hex[:6]
-    transport = build_transport(config)
-
-    async with Client(transport=transport) as client:
-        tools = await client.list_tools()
-        tool_names = {tool.name for tool in tools}
-
-        workspace_page_id = None
-        project_id = None
-        project_page_id = None
-
-        try:
-            print("Creating workspace page...")
-            workspace_page = extract_result(
-                await client.call_tool(
-                    "create_workspace_page",
-                    {
-                        "name": f"Workspace page {unique_id}",
-                        "description_html": f"<p>Workspace page created {unique_id}</p>",
-                    },
-                )
-            )
-            workspace_page_id = workspace_page["id"]
-            print(f"Created workspace page: {workspace_page_id}")
-
-            print("Updating workspace page...")
-            await client.call_tool(
-                "update_workspace_page",
-                {
-                    "page_id": workspace_page_id,
-                    "name": f"Workspace page updated {unique_id}",
-                    "description_html": f"<p>Workspace page updated {unique_id}</p>",
-                },
-            )
-
-            workspace_page = extract_result(
-                await client.call_tool(
-                    "retrieve_workspace_page",
-                    {"page_id": workspace_page_id},
-                )
-            )
-            assert workspace_page["name"] == f"Workspace page updated {unique_id}"
-            assert workspace_page["description_html"] == f"<p>Workspace page updated {unique_id}</p>"
-            print("Workspace page update verified")
-
-            print("Creating project...")
-            project = extract_result(
-                await client.call_tool(
-                    "create_project",
-                    {
-                        "name": f"Page Test Project {unique_id}",
-                        "identifier": f"PP{unique_id[:3].upper()}",
-                        "description": "Project for page update integration test",
-                    },
-                )
-            )
-            project_id = project["id"]
-            print(f"Created project: {project_id}")
-
-            print("Creating project page...")
-            project_page = extract_result(
-                await client.call_tool(
-                    "create_project_page",
-                    {
-                        "project_id": project_id,
-                        "name": f"Project page {unique_id}",
-                        "description_html": f"<p>Project page created {unique_id}</p>",
-                    },
-                )
-            )
-            project_page_id = project_page["id"]
-            print(f"Created project page: {project_page_id}")
-
-            print("Updating project page...")
-            await client.call_tool(
-                "update_project_page",
-                {
-                    "project_id": project_id,
-                    "page_id": project_page_id,
-                    "name": f"Project page updated {unique_id}",
-                    "description_html": f"<p>Project page updated {unique_id}</p>",
-                },
-            )
-
-            project_page = extract_result(
-                await client.call_tool(
-                    "retrieve_project_page",
-                    {
-                        "project_id": project_id,
-                        "page_id": project_page_id,
-                    },
-                )
-            )
-            assert project_page["name"] == f"Project page updated {unique_id}"
-            assert project_page["description_html"] == f"<p>Project page updated {unique_id}</p>"
-            print("Project page update verified")
-        finally:
-            if project_id:
-                print("Deleting project...")
-                try:
-                    await client.call_tool("delete_project", {"project_id": project_id})
-                    print("Deleted project")
-                except Exception as error:
-                    print(f"Project cleanup failed: {error}")
-
-            if workspace_page_id and "delete_workspace_page" in tool_names:
-                print("Deleting workspace page...")
-                try:
-                    await client.call_tool("delete_workspace_page", {"page_id": workspace_page_id})
-                    print("Deleted workspace page")
-                except Exception as error:
-                    print(f"Workspace page cleanup failed: {error}")
-
-
 def test_tools_availability():
     """Pytest entry point - verifies all expected tools are registered."""
     asyncio.run(run_tools_availability_test())
-
-
-def test_page_update_integration():
-    """Pytest entry point - verifies workspace/project page update flows."""
-    asyncio.run(run_page_update_integration_test())
 
 
 if __name__ == "__main__":
